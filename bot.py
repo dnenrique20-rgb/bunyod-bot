@@ -2,7 +2,7 @@ import telebot
 from telebot import types
 
 # 1. SOZLAMALAR
-TOKEN = '7985996255:AAFzCXx6gKmP4M1TDV10AUPTAsN1-6xY6qI' 
+TOKEN = '7985996255:AAFzCXx6gKmP4MlTDV18ZNa7TqaUsNikKgE' 
 CHANNELS = ['@smm_premium_channel'] 
 bot = telebot.TeleBot(TOKEN)
 
