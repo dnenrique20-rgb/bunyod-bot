@@ -1,24 +1,55 @@
 import telebot
 from telebot import types
 
-# BotFather'dan olgan tokenni mana shu qo'shtirnoq ichiga yozing
-TOKEN = "7985996255:AAFzCXx6gKmP4MlTDV18ZNa7TqaUsNikKgE"
+# 1. SOZLAMALAR
+TOKEN = '7985996255:AAFzCXx6gKmP4M1TDV10AUPTAsN1-6xY6qI' # Tokeningizni joyiga qo'ydim
+CHANNELS = ['@smm_premium_channel'] 
 bot = telebot.TeleBot(TOKEN)
+
+def check_sub(user_id):
+    try:
+        for channel in CHANNELS:
+            status = bot.get_chat_member(chat_id=channel, user_id=user_id).status
+            if status == 'left': return False
+        return True
+    except: return False
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn1 = types.KeyboardButton("Premium sotib olish")
-    btn2 = types.KeyboardButton("Admin bilan bog'lanish")
-    markup.add(btn1, btn2)
-    
-    bot.send_message(message.chat.id, f"Salom {message.from_user.first_name}! Botga xush kelibsiz.", reply_markup=markup)
+    if check_sub(message.from_user.id):
+        markup = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+        btn_phone = types.KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)
+        markup.add(btn_phone)
+        bot.send_message(message.chat.id, "👋 Salom! Premium yutish uchun raqamingizni yuboring 👇", reply_markup=markup)
+    else:
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        btn_sub = types.InlineKeyboardButton(text="Kanalga obuna bo'lish ➕", url="https://t.me/smm_premium_channel")
+        btn_done = types.InlineKeyboardButton(text="Obunani tekshirish ✅", callback_data="check_sub")
+        markup.add(btn_sub, btn_done)
+        bot.send_message(message.chat.id, "❌ Botdan foydalanish uchun kanalga obuna bo'ling!", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: True)
-def messages(message):
-    if message.text == "Premium sotib olish":
-        bot.send_message(message.chat.id, "Premium narxlari:\n- 1 oylik: 50 000 so'm\n- 1 yillik: 400 000 so'm")
-    elif message.text == "Admin bilan bog'lanish":
-        bot.send_message(message.chat.id, "Admin: @Sizning_Usernamengiz")
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def check_callback(call):
+    if check_sub(call.from_user.id):
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        start(call.message)
+    else:
+        bot.answer_callback_query(call.id, "Siz hali obuna bo'lmadingiz! ✨", show_alert=True)
 
-bot.polling()
+@bot.message_handler(content_types=['contact'])
+def contact_handler(message):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    web_app = types.WebAppInfo(url="https://google.com") 
+    btn_mini = types.InlineKeyboardButton(text="🚀 Premium olish (Tekshirish)", web_app=web_app)
+    btn_ref = types.InlineKeyboardButton(text="➕ Do'stlarni taklif qilish", callback_data="ref")
+    markup.add(btn_mini, btn_ref)
+    bot.send_message(message.chat.id, "✅ Raqam tasdiqlandi! Endi botdan foydalaning:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data == "ref")
+def referal(call):
+    bot_user = bot.get_me().username
+    ref_link = f"https://t.me/{bot_user}?start={call.from_user.id}"
+    bot.send_message(call.message.chat.id, f"🔗 Taklif havolangiz:\n\n{ref_link}")
+
+bot.polling(none_stop=True)
+
