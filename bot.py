@@ -26,7 +26,7 @@ def run_web_server():
     port = int(os.environ.get("PORT", 5000))
     server.run(host="0.0.0.0", port=port)
 
-# --- 2. BAZA (SQLITE) ---
+# --- 2. MA'LUMOTLAR BAZASI ---
 def init_db():
     conn = sqlite3.connect('users.db', check_same_thread=False)
     c = conn.cursor()
@@ -47,34 +47,24 @@ def update_balance(uid, amount):
 
 init_db()
 
-# --- 3. START VA ASOSIY MENYU ---
+# --- 3. START VA ASOSIY MENYU (YANGILANGAN XABAR) ---
 @bot.message_handler(commands=['start'])
 def start(message):
     uid = message.from_user.id
-    args = message.text.split()
+    update_balance(uid, 0)
     
-    # Referal tizimi
-    conn = sqlite3.connect('users.db'); c = conn.cursor()
-    user = c.execute("SELECT id FROM users WHERE id=?", (uid,)).fetchone()
-    if not user:
-        referrer = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
-        if referrer and referrer != uid:
-            update_balance(referrer, REFERAL_BONUS)
-            try: bot.send_message(referrer, f"🎉 Do'stingiz qo'shildi! +{REFERAL_BONUS} so'm.")
-            except: pass
-        c.execute("INSERT INTO users (id, balance, referred_by) VALUES (?, 0, ?)", (uid, referrer))
-        conn.commit()
-    conn.close()
-
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("🎁 Telegram Premium", "⭐️ Telegram Stars") 
     markup.add("💎 Xizmatlar", "💳 Balans To'ldirish")
     markup.add("👤 Profil", "💰 Pul Ishlash")
-    if uid == ADMIN_ID: markup.add("⚙️ Admin Panel", "📊 Statistika")
+    
+    if uid == ADMIN_ID:
+        markup.add("⚙️ Admin Panel")
         
-    bot.send_message(message.chat.id, "Xush kelibsiz! YashilSMM kabi professional xizmatlar markazi.", reply_markup=markup)
+    # Siz aytgan yangi xabar
+    bot.send_message(message.chat.id, "Assalomu alaykum telegram xizmatlar botiga xush kelibsiz!", reply_markup=markup)
 
-# --- 4. TUGMALARNI BOSHQARISH ---
+# --- 4. ASOSIY TUGMALARNI QAYTA ISHLASH ---
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     uid = message.from_user.id
@@ -87,7 +77,7 @@ def handle_text(message):
             types.InlineKeyboardButton("🎁 6 oy — 225,000 so'm", callback_data="buy_PREM6_225000_1"),
             types.InlineKeyboardButton("🎁 1 yil — 310,000 so'm", callback_data="buy_PREM12_310000_1")
         )
-        bot.send_message(message.chat.id, "🎁 **Premium Gift narxlari:**", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(message.chat.id, "🎁 **Telegram Premium narxlari:**", reply_markup=markup, parse_mode="Markdown")
 
     elif message.text == "⭐️ Telegram Stars":
         markup = types.InlineKeyboardMarkup(row_width=1)
@@ -102,92 +92,107 @@ def handle_text(message):
     elif message.text == "💎 Xizmatlar":
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("🔹 Telegram (Obunachi/Ko'rishlar)", callback_data="cat_tg_all"),
-            types.InlineKeyboardButton("🔸 Instagram (Obunachi/Like)", callback_data="cat_inst_all")
+            types.InlineKeyboardButton("🔹 Telegram (Obunachi/Like)", callback_data="cat_tg_full"),
+            types.InlineKeyboardButton("🔸 Instagram (Obunachi/Like)", callback_data="cat_inst_full")
         )
-        bot.send_message(message.chat.id, "Xizmat turini tanlang:", reply_markup=markup)
+        bot.send_message(message.chat.id, "Ijtimoiy tarmoqni tanlang:", reply_markup=markup)
 
     elif message.text == "👤 Profil":
         conn = sqlite3.connect('users.db'); c = conn.cursor()
-        bal = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone()[0]
-        conn.close()
-        bot.send_message(message.chat.id, f"👤 **ID:** `{uid}`\n💰 **Balans:** {bal:,.0f} so'm", parse_mode="Markdown")
+        res = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone()
+        bal = res[0] if res else 0; conn.close()
+        bot.send_message(message.chat.id, f"👤 **Profilingiz:**\n🆔 ID: `{uid}`\n💰 Balans: {bal:,.0f} so'm", parse_mode="Markdown")
 
     elif message.text == "💳 Balans To'ldirish":
         bot.send_message(message.chat.id, f"💳 **Karta:** `{KARTA}`\n👤 **Egasi:** {KARTA_EGASI}\n\nTo'lovdan so'ng chekni @admin ga yuboring.")
 
-    elif message.text == "📊 Statistika" and uid == ADMIN_ID:
-        conn = sqlite3.connect('users.db'); c = conn.cursor()
-        count = c.execute("SELECT COUNT(id) FROM users").fetchone()[0]
-        conn.close()
-        bot.send_message(message.chat.id, f"📊 **Jami obunachilar:** {count} ta")
-
     elif message.text == "⚙️ Admin Panel" and uid == ADMIN_ID:
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 Reklama tarqatish", callback_data="admin_reklama"))
-        bot.send_message(message.chat.id, "Admin boshqaruv paneli:", reply_markup=markup)
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("📢 Reklama yuborish", callback_data="adm_send"),
+            types.InlineKeyboardButton("📊 Statistika", callback_data="adm_stats")
+        )
+        bot.send_message(message.chat.id, "🛠 **Boshqaruv paneli:**", reply_markup=markup)
 
-# --- 5. TOPSMM.UZ API KATEGORIYALARI ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("cat_"))
-def inline_cats(call):
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    if call.data == "cat_tg_all":
+# --- 5. CALLBACKLAR (KATEGORIYA VA BUYURTMA) ---
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callbacks(call):
+    uid = call.from_user.id
+    
+    # Kategoriya - Telegram
+    if call.data == "cat_tg_full":
+        markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("👥 Obunachi (1571) — 8k", callback_data="buy_1571_8000_1000"),
-            types.InlineKeyboardButton("🚀 Prem Obunachi (1516) — 65k", callback_data="buy_1516_65000_1000"),
-            types.InlineKeyboardButton("👁 Ko'rishlar (1556) — 1k", callback_data="buy_1556_1000_1000"),
+            types.InlineKeyboardButton("👁 Ko'rish (1556) — 1k", callback_data="buy_1556_1000_1000"),
             types.InlineKeyboardButton("🔙 Orqaga", callback_data="cat_back")
         )
         bot.edit_message_text("🔹 Telegram xizmatlari:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-    elif call.data == "cat_inst_all":
+
+    # Kategoriya - Instagram
+    elif call.data == "cat_inst_full":
+        markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
             types.InlineKeyboardButton("👥 Obunachi (1577) — 10k", callback_data="buy_1577_10000_1000"),
             types.InlineKeyboardButton("❤️ Like (1580) — 5k", callback_data="buy_1580_5000_1000"),
             types.InlineKeyboardButton("🔙 Orqaga", callback_data="cat_back")
         )
         bot.edit_message_text("🔸 Instagram xizmatlari:", call.message.chat.id, call.message.message_id, reply_markup=markup)
-    elif call.data == "cat_back":
-        markup.add(
-            types.InlineKeyboardButton("🔹 Telegram (Obunachi/Ko'rishlar)", callback_data="cat_tg_all"),
-            types.InlineKeyboardButton("🔸 Instagram (Obunachi/Like)", callback_data="cat_inst_all")
-        )
-        bot.edit_message_text("Xizmat turini tanlang:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# --- 6. BUYURTMA VA REKLAMA ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("buy_"))
-def process_buy(call):
-    _, sid, price, qty = call.data.split("_")
-    conn = sqlite3.connect('users.db'); c = conn.cursor()
-    bal = c.execute("SELECT balance FROM users WHERE id=?", (call.from_user.id,)).fetchone()[0]
-    conn.close()
-    if bal >= float(price):
-        msg = bot.send_message(call.message.chat.id, "Link yuboring:")
-        bot.register_next_step_handler(msg, finalize_order, sid, float(price), int(qty))
-    else: bot.answer_callback_query(call.id, "❌ Mablag' yetarli emas!", show_alert=True)
+    # Admin: Reklama
+    elif call.data == "adm_send" and uid == ADMIN_ID:
+        msg = bot.send_message(call.message.chat.id, "Reklamani yuboring:")
+        bot.register_next_step_handler(msg, start_broadcast)
 
+    # Admin: Statistika
+    elif call.data == "adm_stats" and uid == ADMIN_ID:
+        conn = sqlite3.connect('users.db'); c = conn.cursor()
+        count = c.execute("SELECT COUNT(id) FROM users").fetchone()[0]
+        conn.close()
+        bot.answer_callback_query(call.id, f"📊 Obunachilar: {count}", show_alert=True)
+
+    # Buyurtma boshlash
+    elif call.data.startswith("buy_"):
+        _, sid, price, qty = call.data.split("_")
+        conn = sqlite3.connect('users.db'); c = conn.cursor()
+        bal = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone()[0]
+        conn.close()
+        if bal >= float(price):
+            msg = bot.send_message(call.message.chat.id, "Link yuboring:")
+            bot.register_next_step_handler(msg, finalize_order, sid, float(price), int(qty))
+        else:
+            bot.answer_callback_query(call.id, "❌ Mablag' yetarli emas!", show_alert=True)
+
+# --- 6. FUNKSIYALAR ---
 def finalize_order(message, sid, price, qty):
     uid = message.from_user.id
     update_balance(uid, -price)
     if sid.startswith("PREM") or sid.startswith("STARS"):
         bot.send_message(ADMIN_ID, f"🔔 **QO'LDA:**\nID: {uid}\nXizmat: {sid}\nLink: {message.text}")
-        bot.send_message(uid, "✅ Buyurtma qabul qilindi!")
+        bot.send_message(uid, "✅ Qabul qilindi!")
     else:
         res = requests.post(API_URL, data={'key': API_KEY, 'action': 'add', 'service': sid, 'link': message.text, 'quantity': qty}).json()
-        bot.send_message(uid, f"✅ Order yuborildi: {res.get('order', 'Xato')}")
+        bot.send_message(uid, f"📦 Order ID: {res.get('order', 'Xato')}")
 
-@bot.callback_query_handler(func=lambda call: call.data == "admin_reklama")
-def rek_prompt(call):
-    msg = bot.send_message(call.message.chat.id, "Reklamani yuboring:")
-    bot.register_next_step_handler(msg, send_reklama)
-
-def send_reklama(message):
+def start_broadcast(message):
     conn = sqlite3.connect('users.db'); c = conn.cursor()
     ids = c.execute("SELECT id FROM users").fetchall()
     conn.close()
     for u_id in ids:
         try: bot.copy_message(u_id[0], message.chat.id, message.message_id); time.sleep(0.05)
         except: pass
-    bot.send_message(ADMIN_ID, "✅ Reklama tugatildi!")
+    bot.send_message(ADMIN_ID, "✅ Reklama tarqatildi!")
+
+# --- 7. ADMIN /PAY BUYRUG'I ---
+@bot.message_handler(commands=['pay'])
+def admin_pay(message):
+    if message.from_user.id == ADMIN_ID:
+        try:
+            _, tid, sum_v = message.text.split()
+            update_balance(int(tid), float(sum_v))
+            bot.send_message(int(tid), f"✅ Balansingiz {sum_v} so'mga to'ldirildi!")
+            bot.send_message(ADMIN_ID, "Bajarildi!")
+        except: pass
 
 if __name__ == "__main__":
     Thread(target=run_web_server).start()
